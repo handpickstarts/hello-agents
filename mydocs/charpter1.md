@@ -75,3 +75,9 @@ P:Performance ： 动态调整运动计划、运动过程中调整运动姿势�
 E:Environment ： 通过运动数据能得到的结果的算法或模型
 A:Actuators ： 文字语音显示运动计划 或者饮食建议、语音或文字或者图像或者视频播放运动调整
 S:Sensors ： 穿戴设备拿到心率、运动强度等数据
+
+# 案列
+
+简单的旅行助手
+
+实现 aim-promt-thought-llm-tool-action-observetion
