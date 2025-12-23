@@ -18,6 +18,7 @@ ACTION: [这里是你需要调用的工具，格式为 function_name(arg_name="a
 
 """
 
+from random import choice
 import requests
 import json
 
@@ -46,12 +47,52 @@ def getAdvice(city : str,weather : str) -> str:
     """
     根据城市和天气，获取旅行的建议
     """
-    tavily_client = TavilyClient(api_key="tvly-33333333333333333333333333333333")
-    response = tavily_client.search(query=f"在{city}，{weather}的情况下，我该如何旅行？")
-    return ""
+    api_key = os.environ.get("TAVILY_API_KEY") # 推荐方式
+    if not api_key:
+        return "错误：未配置TAVILY_API_KEY环境变量"
+    query = f"在{city}，{weather}的情况下，我该如何旅行？"
+    try:
+
+        tavily_client = TavilyClient(api_key= api_key)
+        # include_answer 会返回一个综合性回答
+        response = tavily_client.search(query=query,search_depth="basic",include_answer= True)
+        # 解析返回结构体
+        if response.get("answer"):
+            return response["answer"]
+        # 如果没有综合性回答，则格式化原始结果
+        format_results = []
+        for result in response.get("results",[]):
+            format_results.append(f"- {result['title']}: {result['content']}")
+
+        if not format_results:
+            return "没有找到相关的旅行建议"        
+
+        return f"以下是根据{city}和{weather}的建议：\n" + "\n".join(format_results)
+    except Exception as e:
+        return f"错误：查询旅行建议时遇到问题 - {e}"
     
     
-    available_tools = {
+available_tools = {
     "getWeather": getWeather,
     "getAdvice": getAdvice,
 }
+
+from openai import OpenAI
+
+class LlmAgent:
+    def __init__(self,api_key : str,model : str,base_url : str):
+        self.model = model
+        self.client = OpenAI(api_key=api_key,base_url=base_url)
+        
+    def generate(self,user_promt : str,system_promt: str) -> str:
+        print("正在调用大模型")
+        try:
+            messages = [{'role':'system','content':system_promt},
+            {'role':'user','content':user_promt}]
+            response = self.client.chat.completions.create(messages= messages,model= self.model,stream= False)
+            answer = response.choices[0].message.content
+            print("大语言模型响应成功")
+            return answer
+        except Exception as e:
+            print(f"调用LLM API时发生错误: {e}")
+            return "错误：调用语言模型服务时出错"
