@@ -22,6 +22,8 @@ from random import choice
 import requests
 import json
 
+from code.chapter1.FirstAgentTest import MODEL_ID, truncated
+
 
 
 def getWeather(city: str) -> str:
@@ -79,7 +81,7 @@ available_tools = {
 
 from openai import OpenAI
 
-class LlmAgent:
+class LlmClient:
     def __init__(self,api_key : str,model : str,base_url : str):
         self.model = model
         self.client = OpenAI(api_key=api_key,base_url=base_url)
@@ -96,3 +98,69 @@ class LlmAgent:
         except Exception as e:
             print(f"调用LLM API时发生错误: {e}")
             return "错误：调用语言模型服务时出错"
+
+import re
+
+LLM_API_KEY = os.environ.get("OPENAI_API_KEY")
+BASE_URL = None
+MODEL_ID = "gpt-4o-mini"
+
+
+llmClient = LlmClient(api_key=os.environ.get("OPENAI_API_KEY"),model="gpt-3.5-turbo",base_url="https://openai.api.sb.cn/v1")
+
+user_promt = "你好"
+promt_history = [f"用户请求:{user_promt}"]
+
+print(f"用户请求:{user_promt}\n'='*40")
+
+for i in range(5):
+    print(f"第{i}轮回复:")
+    # 1.构建promt
+    full_promt = "\n".join(promt_history)
+    # 2、模型思考
+    llm_output = llmClient.generate(user_promt=full_promt,system_promt=AGENT_SYSTEM_PROMT)
+    print(f"大模型回复:{llm_output}")
+    # 输出会有多余的Thought-Action对，需要通过正则表示patter匹配截取，只取第一个
+    th_ac_pattern = r'(Thought:.*? Action:.*?)(?=\n\s(?:Tought:|Action:|Observation:)|\Z)'
+    match = re.search(pattern=th_ac_pattern,string=full_promt,flags=re.DOTALL)
+    if match:
+        truncated = match.group(1).strip
+        if truncated != llm_output.strip:
+            llm_output = truncated
+    print("截取到的有效回复:",llm_output)
+    promt_history.append(llm_output)
+    # 3.解析获取Action，并执行行动
+    action_pattern = r'Action: (.*)'
+    action_match = re.search(action_pattern,llm_output,flags=re.DOTALL)
+    
+    if not action_match:
+        print("模型未输出有效Action")
+        break
+    action_str = action_match.group(1).strip()
+    print("解析到的Action:",action)
+
+    # 4 结束解析
+    if action_str.startswith("finish"):
+        finish_pattern = r'finish:\(answer:"(.*)"\)'
+        finish_match = re.search(finish_pattern,llm_output,flags=re.DOTALL)
+        if finish_match:
+            finish = finish_match.group(1).strip()
+            print("任务完成，最终答案为:",finish)
+            break
+    
+    # 5 执行行动 Action:(tool_name(arg_key="arg_value"))
+    tool_name = re.search(r'(\w+)\(',action_str,re.DOTALL)
+    args_str = re.search(r'\((.*?)\)',action_str,re.DOTALL)
+    kwargs = dict(re.findall(r'(\w+)="([^"]*)"',args_str,re.DOTALL))
+
+    if tool_name in available_tools:
+        observation = available_tools[tool_name](**kwargs)
+    else:
+        observation =  f"错误：未定义的工具 '{tool_name}'"
+
+    observation_str = f"Observation: {observation}"
+    print(f'{observation_str}\n' + "="*40)
+    promt_history.append(observation_str)
+
+
+
