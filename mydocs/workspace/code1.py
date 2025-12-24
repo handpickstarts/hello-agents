@@ -7,12 +7,12 @@ AGENT_SYSTEM_PROMT = """
 
 # 行动格式
 你的回答必须严格遵循以下格式。首先是你的思考过程，然后是你要执行的具体行动。每一次回复只输出一对Thought-Action。
-Thought: [这里是i的思考过程]
-ACTION: [这里是你需要调用的工具，格式为 function_name(arg_name="arg_value")]
+Thought: [这里是你的思考过程]
+Action: [这里是你需要调用的工具，格式为 function_name(arg_name="arg_value")]
 
 
 # 任务完成
-当你觉得你收集到足够的信息，已经完成用户提出的需求时，你必须在`ACTION:`字段后面使用`finish(answer="")`来输出最终答案。
+当你觉得你收集到足够的信息，已经完成用户提出的需求时，你必须在`Action:`字段后面使用`finish(answer="")`来输出最终答案。
 
 请开始吧!
 
@@ -21,9 +21,6 @@ ACTION: [这里是你需要调用的工具，格式为 function_name(arg_name="a
 from random import choice
 import requests
 import json
-
-from code.chapter1.FirstAgentTest import MODEL_ID, truncated
-
 
 
 def getWeather(city: str) -> str:
@@ -42,17 +39,22 @@ def getWeather(city: str) -> str:
         return f"错误:查询天气时遇到网络问题 - {e}"    
     except (KeyError, IndexError) as e:
         return f"错误：解析天气数据失败，可能是城市名称无效 - {e}"
-    
+     
     
 from tavily import TavilyClient
+import os
+
+TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY") 
+print("TAVILY_API_KEY:",TAVILY_API_KEY)
+
 def getAdvice(city : str,weather : str) -> str:
     """
     根据城市和天气，获取旅行的建议
     """
-    api_key = os.environ.get("TAVILY_API_KEY") # 推荐方式
+    api_key = TAVILY_API_KEY # 推荐方式
     if not api_key:
         return "错误：未配置TAVILY_API_KEY环境变量"
-    query = f"在{city}，{weather}的情况下，我该如何旅行？"
+    query = f"{city}在{weather}天气下最适合的旅游景点推荐及理由"
     try:
 
         tavily_client = TavilyClient(api_key= api_key)
@@ -71,7 +73,7 @@ def getAdvice(city : str,weather : str) -> str:
 
         return f"以下是根据{city}和{weather}的建议：\n" + "\n".join(format_results)
     except Exception as e:
-        return f"错误：查询旅行建议时遇到问题 - {e}"
+        return f"-错误：查询旅行建议时遇到问题 - {e}"
     
     
 available_tools = {
@@ -87,7 +89,7 @@ class LlmClient:
         self.client = OpenAI(api_key=api_key,base_url=base_url)
         
     def generate(self,user_promt : str,system_promt: str) -> str:
-        print("正在调用大模型")
+        print("-正在调用大模型")
         try:
             messages = [{'role':'system','content':system_promt},
             {'role':'user','content':user_promt}]
@@ -100,26 +102,38 @@ class LlmClient:
             return "错误：调用语言模型服务时出错"
 
 import re
+import os
 
-LLM_API_KEY = os.environ.get("OPENAI_API_KEY")
-BASE_URL = None
-MODEL_ID = "gpt-4o-mini"
+# openai
+# LLM_API_KEY = os.environ.get("OPENAI_API_KEY")
+# BASE_URL = None
+# MODEL_ID = "gpt-4o-mini"
 
+# ds
+# LLM_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
+# BASE_URL = os.environ.get("DEEPSEEK_BASE_URL")
+# MODEL_ID = "deepseek-reasoner"
 
-llmClient = LlmClient(api_key=os.environ.get("OPENAI_API_KEY"),model="gpt-3.5-turbo",base_url="https://openai.api.sb.cn/v1")
+# ollama
+LLM_API_KEY = None
+BASE_URL = "http://127.0.0.1:11434/v1"
+MODEL_ID = "deepseek-r1:7b"
+print(f"使用模型:{MODEL_ID}\n" + f"LLM_API_KEY:{LLM_API_KEY}\n" + f"BASE_URL:{BASE_URL}")
 
-user_promt = "你好"
+llmClient = LlmClient(api_key=LLM_API_KEY,model=MODEL_ID,base_url=BASE_URL)
+
+user_promt = f"你好，请帮我查询一下今天长沙的天气，然后根据天气推荐一个合适的旅游景点。"
 promt_history = [f"用户请求:{user_promt}"]
 
-print(f"用户请求:{user_promt}\n'='*40")
+print(f"用户请求:{user_promt}\n"+ "="*40)
 
-for i in range(5):
-    print(f"第{i}轮回复:")
+for i in range(1,5):
+    print(f"--- 循环 {i} ---\n")
     # 1.构建promt
     full_promt = "\n".join(promt_history)
     # 2、模型思考
     llm_output = llmClient.generate(user_promt=full_promt,system_promt=AGENT_SYSTEM_PROMT)
-    print(f"大模型回复:{llm_output}")
+    print(f"-大模型回复:{llm_output}")
     # 输出会有多余的Thought-Action对，需要通过正则表示patter匹配截取，只取第一个
     th_ac_pattern = r'(Thought:.*? Action:.*?)(?=\n\s(?:Tought:|Action:|Observation:)|\Z)'
     match = re.search(pattern=th_ac_pattern,string=full_promt,flags=re.DOTALL)
@@ -127,17 +141,20 @@ for i in range(5):
         truncated = match.group(1).strip
         if truncated != llm_output.strip:
             llm_output = truncated
-    print("截取到的有效回复:",llm_output)
+    else:
+        print("-未匹配到有效Thought-Action对")
+        break        
+    print("-截取到的有效回复:",llm_output)
     promt_history.append(llm_output)
     # 3.解析获取Action，并执行行动
     action_pattern = r'Action: (.*)'
     action_match = re.search(action_pattern,llm_output,flags=re.DOTALL)
     
     if not action_match:
-        print("模型未输出有效Action")
+        print("-模型未输出有效Action")
         break
     action_str = action_match.group(1).strip()
-    print("解析到的Action:",action)
+    print("-解析到的Action:",action)
 
     # 4 结束解析
     if action_str.startswith("finish"):
@@ -145,7 +162,7 @@ for i in range(5):
         finish_match = re.search(finish_pattern,llm_output,flags=re.DOTALL)
         if finish_match:
             finish = finish_match.group(1).strip()
-            print("任务完成，最终答案为:",finish)
+            print("-任务完成，最终答案为:",finish)
             break
     
     # 5 执行行动 Action:(tool_name(arg_key="arg_value"))
@@ -156,7 +173,7 @@ for i in range(5):
     if tool_name in available_tools:
         observation = available_tools[tool_name](**kwargs)
     else:
-        observation =  f"错误：未定义的工具 '{tool_name}'"
+        observation =  f"-错误：未定义的工具 '{tool_name}'"
 
     observation_str = f"Observation: {observation}"
     print(f'{observation_str}\n' + "="*40)
