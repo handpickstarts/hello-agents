@@ -31,8 +31,15 @@ def getWeather(city: str) -> str:
         print(f"-调用天气API,城市:{city}")
         response = requests.get(url)
         response.raise_for_status
+        data = response.json()
+                
+        # 提取当前天气状况
+        current_condition = data['current_condition'][0]
+        weather_desc = current_condition['weatherDesc'][0]['value']
+        temp_c = current_condition['temp_C']
         
-        return ""
+        # 格式化成自然语言返回
+        return f"{city}当前天气：{weather_desc}，气温{temp_c}摄氏度"
     except requests.exceptions.RequestException as e:
         return f"错误:查询天气时遇到网络问题 - {e}"    
     except (KeyError, IndexError) as e:
@@ -115,7 +122,7 @@ import os
 
 # ollama
 LLM_API_KEY = None
-BASE_URL = "http://localhost:11434/v1"
+BASE_URL = "http://127.0.0.1:11434/v1"
 MODEL_ID = "deepseek-r1:7b"
 print(f"使用模型:{MODEL_ID}\n" + f"LLM_API_KEY:{LLM_API_KEY}\n" + f"BASE_URL:{BASE_URL}")
 
