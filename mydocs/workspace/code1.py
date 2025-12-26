@@ -2,22 +2,22 @@ AGENT_SYSTEM_PROMT = """
 你是一个智能旅行助手。你的任务是解决用户的需求，你可以使用可用工具来一步步来解决问题。
 
 # 可用工具
-- getWeather(city) : 根据城市获取到城市天气
-- getAdvice(city,weather) : 根据城市和天气，获取旅行的建议
+- getWeather(city: str) : 根据城市获取到城市天气
+- getAdvice(city: str,weather: str) : 根据城市和天气，获取旅行的建议
 
 # 行动格式
-你的回答必须严格遵循以下格式。首先是你的思考过程，然后是你要执行的具体行动。每一次回复只输出一对Thought-Action。
-Thought: [这里是你的思考过程]
+你的回答必须严格遵循以下格式。首先是你的思考过程，然后是你要执行的具体行动。每次回复只输出一对Thought-Action。
+Thought: [这里是你的思考过程和下一步计划]
 Action: [这里是你需要调用的工具，格式为 function_name(arg_name="arg_value")]
 
-
 # 任务完成
-当你觉得你收集到足够的信息，已经完成用户提出的需求时，你必须在`Action:`字段后面使用`finish(answer="")`来输出最终答案。
+当你觉得你收集到足够的信息，已经完成用户提出的需求时，你必须在`Action:`字段后面使用`finish(answer="...")`来输出最终答案。
 
 请开始吧!
 
 """
 
+from email import message
 from random import choice
 import requests
 import json
@@ -135,11 +135,11 @@ for i in range(1,5):
     llm_output = llmClient.generate(user_promt=full_promt,system_promt=AGENT_SYSTEM_PROMT)
     print(f"-大模型回复:{llm_output}")
     # 输出会有多余的Thought-Action对，需要通过正则表示patter匹配截取，只取第一个
-    th_ac_pattern = r'(Thought:.*? Action:.*?)(?=\n\s(?:Tought:|Action:|Observation:)|\Z)'
-    match = re.search(pattern=th_ac_pattern,string=full_promt,flags=re.DOTALL)
+    th_ac_pattern = r'(Thought:.*?Action:.*?)(?=\n\s*(?:Thought:|Action:|Observation:)|\Z)'
+    match = re.search(pattern= th_ac_pattern, message = llm_output,type = re.DOTALL)
     if match:
-        truncated = match.group(1).strip
-        if truncated != llm_output.strip:
+        truncated = match.group(1).strip()
+        if truncated != llm_output.strip():
             llm_output = truncated
     else:
         print("-未匹配到有效Thought-Action对")
