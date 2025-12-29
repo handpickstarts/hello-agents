@@ -97,8 +97,10 @@ class LlmClient:
     def generate(self,user_promt : str,system_promt: str) -> str:
         print("-正在调用大模型")
         try:
-            messages = [{'role':'system','content':system_promt},
-            {'role':'user','content':user_promt}]
+            messages = [
+                {'role':'system','content':system_promt},
+                {'role':'user','content':user_promt}
+            ]
             response = self.client.chat.completions.create(messages= messages,model= self.model,stream= False)
             answer = response.choices[0].message.content
             print("大语言模型响应成功")
@@ -116,14 +118,15 @@ import os
 # MODEL_ID = "gpt-4o-mini"
 
 # ds
-# LLM_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
-# BASE_URL = os.environ.get("DEEPSEEK_BASE_URL")
-# MODEL_ID = "deepseek-reasoner"
+LLM_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
+BASE_URL = os.environ.get("DEEPSEEK_BASE_URL")
+MODEL_ID = "deepseek-reasoner"
 
 # ollama
-LLM_API_KEY = None
-BASE_URL = "http://127.0.0.1:11434/v1"
-MODEL_ID = "deepseek-r1:7b"
+# LLM_API_KEY = None
+# BASE_URL = "http://127.0.0.1:11434/v1"
+# MODEL_ID = "deepseek-r1:7b"
+
 print(f"使用模型:{MODEL_ID}\n" + f"LLM_API_KEY:{LLM_API_KEY}\n" + f"BASE_URL:{BASE_URL}")
 
 llmClient = LlmClient(api_key=LLM_API_KEY,model=MODEL_ID,base_url=BASE_URL)
@@ -133,11 +136,12 @@ promt_history = [f"用户请求:{user_promt}"]
 
 print(f"用户请求:{user_promt}\n"+ "="*40)
 
-for i in range(1,5):
-    print(f"--- 循环 {i} ---\n")
+for i in range(5):
+    print(f"--- 循环 {i+1} ---\n")
     # 1.构建promt
     full_promt = "\n".join(promt_history)
     # 2、模型思考
+    print(f"- promt_history is {promt_history}")
     llm_output = llmClient.generate(user_promt=full_promt,system_promt=AGENT_SYSTEM_PROMT)
     print(f"-大模型回复:{llm_output}")
     # 输出会有多余的Thought-Action对，需要通过正则表示patter匹配截取，只取第一个
@@ -164,16 +168,17 @@ for i in range(1,5):
 
     # 4 结束解析
     if action_str.startswith("finish"):
-        finish_pattern = r'finish:\(answer:"(.*)"\)'
-        finish_match = re.search(finish_pattern,llm_output,flags=re.DOTALL)
-        # finish = finish_match.group(1).strip()
-        print("-任务完成，最终答案为:",finish)
+        # finish_pattern = r'finish:\(answer="(.*)"\)'
+        finish_pattern = r'finish\(answer="(.*)"\)'
+        finish_match = re.search(finish_pattern,llm_output)
+        finish_answer = finish_match.group(1).strip()
+        print("-任务完成，最终答案为:",finish_answer)
         break
     
     # 5 执行行动 Action:(tool_name(arg_key="arg_value"))
     tool_name = re.search(r'(\w+)\(',action_str,re.DOTALL).group(1)
     args_str = re.search(r'\((.*?)\)',action_str,re.DOTALL).group(1)
-    kwargs = dict(re.findall(r'(\w+):"([^"]*)"',args_str))
+    kwargs = dict(re.findall(r'(\w+)="([^"]*)"',args_str))
     print(f"-解析工具方法名:{tool_name},参数键值对:{kwargs}")
 
     if tool_name in available_tools:
@@ -186,6 +191,3 @@ for i in range(1,5):
     observation_str = f"Observation: {observation}"
     print(f'{observation_str}\n' + "="*40)
     promt_history.append(observation_str)
-
-
-
